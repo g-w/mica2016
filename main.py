@@ -9,6 +9,10 @@ import scipy.sparse.csgraph as ng
 
 server_encoding = 'UTF-8'
 
+current_time = lambda: int(round(time.time() * 1000))
+
+inf = float('Inf')
+
 def log(*messages):
     print(name, ": ", *messages)
 
@@ -49,6 +53,7 @@ name = choice(['Graham', 'John', 'Terry', 'Eric', 'Terry', 'Michael']) + ' ' + c
 print('Hello my name is', name)
 
 connection = ServerConnection('localhost', 5000)
+#connection = ServerConnection('172.26.6.191', 5000)
 
 while True:
     str = connection.read_line()
@@ -140,6 +145,9 @@ while ongoing:
 
         possible_moves_keys = list(possible_moves.keys())
 
+        timeout = 500 * 0.8
+        start_time = current_time()
+
         def distance(score, another_score):
             return abs(score[2] - another_score[2]) + abs(score[3] - another_score[3])
 
@@ -147,23 +155,35 @@ while ongoing:
             my_score = next(filter(lambda score: score[0] == name, scores))
             fox_score = next(filter(lambda score: score[4], scores))
 
-            is_fox = my_score == fox_score
-
             max_distance = current_map.size_x + current_map.size_y
-            if is_fox:
-                min_distance = min([ distance(score, my_score) for score in scores if score[0] != name])
-                return 1.0 -  min_distance / max_distance
-            return distance(my_score, fox_score) / max_distance
 
-        def select_move(scores, n):
-            if n == max(current_map.size_x, current_map.size_y) / 4:
+            def randomize(score):
+                return score * 0.8 + 0.2 * random()
+
+            def rate_score(current_score):
+                is_fox = current_score == fox_score
+
+                if is_fox:
+                    min_distance = min([ distance(current_score, score) for score in scores if score != current_score])
+                    return 1 - min_distance / max_distance
+                return distance(current_score, fox_score) / max_distance
+
+            return (
+                randomize(rate_score(my_score)),
+                randomize(sum([ rate_score(score) for score in scores if score != my_score ]))
+            )
+
+        def select_move(scores, n, last_rating):
+            if abs(current_time() - start_time) > timeout:
+                return 2, None
+            if n == max(current_map.size_x, current_map.size_y) / 2:
                 return 2, None
 
-            best_rating = 1
+            best_rating = (+inf, -inf)
             best = None
 
             permutations = None
-            if n < 3:
+            if n < 2:
                 permutations = itertools.permutations(possible_moves, len(scores))
             else:
                 permutations = []
@@ -195,23 +215,25 @@ while ongoing:
                 if rating == -1:
                     continue
 
-                rating = 0.9 * rate(new_scores) + 0.1 * random()
+                rating = rate(new_scores)
+
                 if rating == 0:
                     print('this shouldnot happen!')
                     return (rating, my_move)
 
-                bt_rating, bt_move = select_move(new_scores, n + 1)
+                if rating[0] > 0.95 * last_rating[0] or rating[1] < 0.75 * last_rating[1]:
+                    bt_rating, bt_move = select_move(new_scores, n + 1, rating)
 
-                if bt_rating != 2:
-                    rating = bt_rating
+                    if bt_rating != 2:
+                        rating = bt_rating
 
-                if best_rating > rating:
+                if best_rating[0] > rating[0]:
                     best_rating = rating
                     best = my_move
 
             return (best_rating, best)
 
-        rating, move = select_move(scores, 0)
+        rating, move = select_move(scores, 0, rate(scores))
 
         log("my choice", rating, move)
 
