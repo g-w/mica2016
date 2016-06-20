@@ -1,3 +1,4 @@
+from math import *
 from random import *
 from telnetlib import *
 import itertools
@@ -52,8 +53,8 @@ class GameMap:
 name = choice(['Graham', 'John', 'Terry', 'Eric', 'Terry', 'Michael']) + ' ' + choice(['Chapman', 'Cleese', 'Gilliam', 'Idle', 'Jones', 'Palin'])
 print('Hello my name is', name)
 
-connection = ServerConnection('localhost', 5000)
-#connection = ServerConnection('172.26.6.191', 5000)
+#connection = ServerConnection('localhost', 5000)
+connection = ServerConnection('172.26.6.191', 5000)
 
 while True:
     str = connection.read_line()
@@ -145,17 +146,17 @@ while ongoing:
 
         possible_moves_keys = list(possible_moves.keys())
 
-        timeout = 500 * 0.8
+        timeout = 1000 * 0.75
         start_time = current_time()
 
         def distance(score, another_score):
-            return abs(score[2] - another_score[2]) + abs(score[3] - another_score[3])
+            return sqrt((score[2] - another_score[2])**2) + sqrt((score[3] - another_score[3])**2)
 
         def rate(scores):
             my_score = next(filter(lambda score: score[0] == name, scores))
             fox_score = next(filter(lambda score: score[4], scores))
 
-            max_distance = current_map.size_x + current_map.size_y
+            max_distance = sqrt(current_map.size_x**2 + current_map.size_y**2)
 
             def randomize(score):
                 return score * 0.8 + 0.2 * random()
@@ -183,7 +184,7 @@ while ongoing:
             best = None
 
             permutations = None
-            if n < 2:
+            if n < 5:
                 permutations = itertools.permutations(possible_moves, len(scores))
             else:
                 permutations = []
@@ -221,15 +222,22 @@ while ongoing:
                     print('this shouldnot happen!')
                     return (rating, my_move)
 
+                aborted = False
                 if rating[0] > 0.95 * last_rating[0] or rating[1] < 0.75 * last_rating[1]:
                     bt_rating, bt_move = select_move(new_scores, n + 1, rating)
 
                     if bt_rating != 2:
-                        rating = bt_rating
+                        rating = ((rating[0] + bt_rating[0]) / 2, (rating[1] + bt_rating[1]) / 2)
+
+                    if bt_rating == 3:
+                        aborted = True
 
                 if best_rating[0] > rating[0]:
                     best_rating = rating
                     best = my_move
+
+                if aborted:
+                    return (best_rating, best)
 
             return (best_rating, best)
 
