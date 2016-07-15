@@ -1,4 +1,3 @@
-from math import *
 from random import *
 from telnetlib import *
 import itertools
@@ -9,10 +8,6 @@ import numpy as np
 import scipy.sparse.csgraph as ng
 
 server_encoding = 'UTF-8'
-
-current_time = lambda: int(round(time.time() * 1000))
-
-inf = float('Inf')
 
 def log(*messages):
     print(name, ": ", *messages)
@@ -53,8 +48,7 @@ class GameMap:
 name = choice(['Graham', 'John', 'Terry', 'Eric', 'Terry', 'Michael']) + ' ' + choice(['Chapman', 'Cleese', 'Gilliam', 'Idle', 'Jones', 'Palin'])
 print('Hello my name is', name)
 
-#connection = ServerConnection('localhost', 5000)
-connection = ServerConnection('172.26.6.191', 5000)
+connection = ServerConnection('localhost', 5000)
 
 while True:
     str = connection.read_line()
@@ -146,45 +140,30 @@ while ongoing:
 
         possible_moves_keys = list(possible_moves.keys())
 
-        timeout = 1000 * 0.75
-        start_time = current_time()
-
         def distance(score, another_score):
-            return sqrt((score[2] - another_score[2])**2) + sqrt((score[3] - another_score[3])**2)
+            return abs(score[2] - another_score[2]) + abs(score[3] - another_score[3])
 
         def rate(scores):
             my_score = next(filter(lambda score: score[0] == name, scores))
             fox_score = next(filter(lambda score: score[4], scores))
 
-            max_distance = sqrt(current_map.size_x**2 + current_map.size_y**2)
+            is_fox = my_score == fox_score
 
-            def randomize(score):
-                return score * 0.8 + 0.2 * random()
+            max_distance = current_map.size_x + current_map.size_y
+            if is_fox:
+                min_distance = min([ distance(score, my_score) for score in scores if score[0] != name])
+                return 1.0 -  min_distance / max_distance
+            return distance(my_score, fox_score) / max_distance
 
-            def rate_score(current_score):
-                is_fox = current_score == fox_score
-
-                if is_fox:
-                    min_distance = min([ distance(current_score, score) for score in scores if score != current_score])
-                    return 1 - min_distance / max_distance
-                return distance(current_score, fox_score) / max_distance
-
-            return (
-                randomize(rate_score(my_score)),
-                randomize(sum([ rate_score(score) for score in scores if score != my_score ]))
-            )
-
-        def select_move(scores, n, last_rating):
-            if abs(current_time() - start_time) > timeout:
-                return 2, None
-            if n == max(current_map.size_x, current_map.size_y) / 2:
+        def select_move(scores, n):
+            if n == max(current_map.size_x, current_map.size_y) / 4:
                 return 2, None
 
-            best_rating = (+inf, -inf)
+            best_rating = 1
             best = None
 
             permutations = None
-            if n < 5:
+            if n < 3:
                 permutations = itertools.permutations(possible_moves, len(scores))
             else:
                 permutations = []
@@ -216,32 +195,23 @@ while ongoing:
                 if rating == -1:
                     continue
 
-                rating = rate(new_scores)
-
+                rating = 0.9 * rate(new_scores) + 0.1 * random()
                 if rating == 0:
                     print('this shouldnot happen!')
                     return (rating, my_move)
 
-                aborted = False
-                if rating[0] > 0.95 * last_rating[0] or rating[1] < 0.75 * last_rating[1]:
-                    bt_rating, bt_move = select_move(new_scores, n + 1, rating)
+                bt_rating, bt_move = select_move(new_scores, n + 1)
 
-                    if bt_rating != 2:
-                        rating = ((rating[0] + bt_rating[0]) / 2, (rating[1] + bt_rating[1]) / 2)
+                if bt_rating != 2:
+                    rating = bt_rating
 
-                    if bt_rating == 3:
-                        aborted = True
-
-                if best_rating[0] > rating[0]:
+                if best_rating > rating:
                     best_rating = rating
                     best = my_move
 
-                if aborted:
-                    return (best_rating, best)
-
             return (best_rating, best)
 
-        rating, move = select_move(scores, 0, rate(scores))
+        rating, move = select_move(scores, 0)
 
         log("my choice", rating, move)
 
